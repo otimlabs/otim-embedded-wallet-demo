@@ -35,7 +35,7 @@ export default function Home() {
     <div className="min-h-screen flex items-center justify-center bg-white">
       <div className="w-full max-w-md p-8 text-center">
         <h1 className="text-3xl font-bold text-gray-900 mb-8">
-          Silly Bands Login
+          Otim Embedded Wallet Demo Login
         </h1>
         <div className="flex justify-center">
           <Auth {...config} />

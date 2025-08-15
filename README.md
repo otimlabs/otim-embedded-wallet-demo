@@ -1,6 +1,6 @@
-# Silly Bands Subscription App
+# Otim Embedded Wallet Demo
 
-A simple subscription app for buying silly bands using USDC on Base Sepolia.
+A simple subscription app for buying Silly BAndz using USDC on Base Sepolia using various embedded wallet providers
 
 ## Setup
 
@@ -27,7 +27,7 @@ npm run dev
 - ✅ Light mode UI
 - ✅ Simple subscription interface
 - ✅ USDC balance display on Base Sepolia
-- ✅ $1 subscription for silly bands
+- ✅ $1 subscription for silly bandz
 - ✅ Logout functionality
 - ✅ Minimal codebase
 

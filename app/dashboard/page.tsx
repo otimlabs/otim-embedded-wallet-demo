@@ -3,13 +3,17 @@
 import { useState, useEffect } from 'react';
 import { useTurnkey } from '@turnkey/sdk-react';
 import { useRouter } from 'next/navigation';
+import { createOtimClient } from '@otim/sdk';
+import { baseSepolia } from 'viem/chains';
+import { createSiweMessage } from 'viem/siwe';
+import { http, hashMessage } from 'viem';
 
 // USDC token contract on Base Sepolia
 const USDC_CONTRACT = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
 const BASE_SEPOLIA_RPC = 'https://sepolia.base.org';
 
 export default function Dashboard() {
-  const { turnkey, indexedDbClient } = useTurnkey();
+  const { turnkey, indexedDbClient, walletClient } = useTurnkey();
   const [session, setSession] = useState<any>(null);
   const [walletInfo, setWalletInfo] = useState<any>(null);
   const [usdcBalance, setUsdcBalance] = useState<string>('0.00');
@@ -19,6 +23,10 @@ export default function Dashboard() {
   const [subscriptionStatus, setSubscriptionStatus] = useState<string>('');
   const [isRefreshingBalance, setIsRefreshingBalance] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
+  const [walletClientRetryCount, setWalletClientRetryCount] = useState(0);
+  const [otimClient, setOtimClient] = useState<any>(null);
+  const [isOtimLoggedIn, setIsOtimLoggedIn] = useState(false);
+  const [isOtimLoggingIn, setIsOtimLoggingIn] = useState(false);
   const router = useRouter();
 
 
@@ -29,6 +37,100 @@ export default function Dashboard() {
       router.push('/');
     } catch (err) {
       console.error('Logout failed:', err);
+    }
+  };
+
+  const handleOtimLogin = async () => {
+    if (!otimClient || !walletInfo?.accounts?.length) return;
+    
+    // Wait for turnkey to be available
+    if (!turnkey) {
+      console.log('Waiting for turnkey...');
+      // Wait a bit for the turnkey to initialize
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      if (!turnkey) {
+        setError('Turnkey not available. Please try again.');
+        setIsOtimLoggingIn(false);
+        return;
+      }
+    }
+    
+    setIsOtimLoggingIn(true);
+    try {
+      const ethAccount = walletInfo.accounts.find((acc: any) => acc.addressFormat === 'ADDRESS_FORMAT_ETHEREUM');
+      if (!ethAccount) {
+        throw new Error('No Ethereum account found');
+      }
+
+      // Create SIWE message using viem
+      console.log('baseSepolia.id:', baseSepolia.id);
+      const siweMessage = createSiweMessage({
+        domain: 'otim.com',
+        address: ethAccount.address,
+        uri: 'https://app.otim.com',
+        version: '1',
+        chainId: 84532, // Base Sepolia chain ID
+        nonce: Math.random().toString(36).substring(2, 15),
+        issuedAt: new Date(),
+        statement: 'Welcome to Otim! By signing in, you accept the Otim Terms and Conditions (https://otim.com/tac). This request will not trigger a blockchain transaction or cost any gas fees.',
+      });
+
+      // Sign the message with Turnkey using signRawPayload
+      console.log('SIWE message to sign:', siweMessage);
+      
+      if (!turnkey) {
+        throw new Error('Turnkey client not available');
+      }
+      
+      // Use indexedDbClient for signing
+      console.log('indexedDbClient available:', !!indexedDbClient);
+      
+      if (!indexedDbClient) {
+        throw new Error("IndexedDB client not available");
+      }
+      
+      // Hash the SIWE message to get a 32-byte digest for Turnkey
+      const siweMessageDigest = hashMessage(siweMessage);
+      
+      // Sign the SIWE message hash with Turnkey using signRawPayload
+      const signature = await indexedDbClient.signRawPayload({
+        payload: siweMessageDigest,
+        signWith: ethAccount.address as `0x${string}`,
+        encoding: "PAYLOAD_ENCODING_HEXADECIMAL",
+        hashFunction: "HASH_FUNCTION_SHA256",
+      });
+
+      console.log("signature", signature);
+
+      if (!signature) throw new Error("Failed to sign payload");
+      
+      // Parse signature to VRS format according to EIP-7702
+      const yParity = signature.v === "01" ? 1 : 0;
+      const ensureHex = (value: string) => value.startsWith("0x") ? value : `0x${value}`;
+      const r = ensureHex(signature.r) as `0x${string}`;
+      const s = ensureHex(signature.s) as `0x${string}`;
+      
+      const vrsParsedSignature = {
+        v: yParity,
+        r,
+        s,
+      };
+
+      // Submit to Otim using the correct format
+      console.log('Otim client before login:', otimClient);
+      console.log('Otim client account:', otimClient?.account);
+      const response = await otimClient.auth.login({
+        siwe: siweMessage,
+        signature: vrsParsedSignature,
+      });
+
+      setIsOtimLoggedIn(true);
+      console.log('Otim login successful:', response);
+    } catch (error) {
+      console.error('Otim login failed:', error);
+      setError('Failed to login to Otim. Please check console for details.');
+    } finally {
+      setIsOtimLoggingIn(false);
     }
   };
 
@@ -124,6 +226,10 @@ export default function Dashboard() {
   };
 
   const getWalletInfo = async () => {
+    if (walletInfo && walletInfo.accounts.length > 0) {
+      return;
+    }
+    
     if (session && indexedDbClient) {
       try {
         // Get the user's wallets
@@ -150,9 +256,17 @@ export default function Dashboard() {
           const ethAccount = accounts?.accounts.find((acc: any) => acc.addressFormat === 'ADDRESS_FORMAT_ETHEREUM');
           if (ethAccount) {
             await getUsdcBalance(ethAccount.address);
+            
+            // Create Otim client with Turnkey account
+            console.log('Creating Otim client with account:', ethAccount.address);
+            const client = createOtimClient({ 
+              account: ethAccount.address,
+              transport: http(BASE_SEPOLIA_RPC),
+            } as any);
+            console.log('Otim client created:', client);
+            setOtimClient(client);
           }
         } else {
-          console.log('No wallets found for user');
           setWalletInfo({ walletId: 'No wallet found', walletName: 'No wallet', accounts: [] });
         }
       } catch (error) {
@@ -163,7 +277,7 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    if (turnkey) {
+    if (turnkey && !session) {
       setIsLoading(true);
       setError(null);
       
@@ -171,11 +285,9 @@ export default function Dashboard() {
         try {
           const session = await turnkey.getSession();
           if (session) {
-            console.log('Session found:', session);
             setSession(session);
-            setRetryCount(0); // Reset retry count on success
+            setRetryCount(0);
           } else {
-            console.log('No session found, redirecting to login');
             router.push('/');
           }
         } catch (error) {
@@ -183,29 +295,46 @@ export default function Dashboard() {
           setError('Failed to load session');
           setIsLoading(false);
           
-          // Retry up to 3 times
           if (retryCount < 3) {
             setTimeout(() => {
               setRetryCount(prev => prev + 1);
-            }, 1000 * (retryCount + 1)); // Exponential backoff
+            }, 1000 * (retryCount + 1));
           }
         }
       };
 
-      // Try immediately first
       checkSession();
-      
-      // If that fails, try again after a short delay
       const timeoutId = setTimeout(checkSession, 500);
       
       return () => clearTimeout(timeoutId);
     }
-  }, [turnkey, router, retryCount]);
+  }, [turnkey, router, retryCount, session]);
 
   useEffect(() => {
-    if (session) {
+    if (session && !walletInfo) {
       const loadWalletInfo = async () => {
         try {
+          // Wait for IndexedDB client to be ready
+          let attempts = 0;
+          while (!indexedDbClient && attempts < 20) {
+            await new Promise(resolve => setTimeout(resolve, 300));
+            attempts++;
+          }
+          
+          if (!indexedDbClient) {
+            if (walletClientRetryCount < 3) {
+              setWalletClientRetryCount(prev => prev + 1);
+              setTimeout(() => {
+                loadWalletInfo();
+              }, 1000);
+              return;
+            } else {
+              setError('Failed to initialize wallet client. Please refresh the page.');
+              setIsLoading(false);
+              return;
+            }
+          }
+          
           await getWalletInfo();
         } catch (error) {
           console.error('Error loading wallet info:', error);
@@ -216,8 +345,10 @@ export default function Dashboard() {
       };
       
       loadWalletInfo();
+    } else if (session && walletInfo) {
+      setIsLoading(false);
     }
-  }, [session]);
+  }, [session, walletInfo, indexedDbClient]);
 
   // Auto-refresh balance every 5 seconds
   useEffect(() => {
@@ -339,6 +470,18 @@ export default function Dashboard() {
                   <span>💧</span>
                   <span>Get USDC from Faucet</span>
                 </a>
+              ) : !isOtimLoggedIn ? (
+                <button
+                  onClick={handleOtimLogin}
+                  disabled={isOtimLoggingIn}
+                  className={`w-full py-3 px-6 rounded-lg font-semibold text-white transition-colors ${
+                    isOtimLoggingIn
+                      ? 'bg-gray-400 cursor-not-allowed'
+                      : 'bg-orange-500 hover:bg-orange-600'
+                  }`}
+                >
+                  {isOtimLoggingIn ? 'Logging in...' : 'Log in to Otim'}
+                </button>
               ) : (
                 <button
                   onClick={handleSubscribe}

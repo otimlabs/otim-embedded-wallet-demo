@@ -4,8 +4,8 @@ import { TurnkeyProvider } from "@turnkey/sdk-react";
 import "@turnkey/sdk-react/styles";
 
 export const metadata: Metadata = {
-  title: "Turnkey Login Demo",
-  description: "Simple Turnkey embedded wallet demo",
+  title: "Silly Bands Subscription",
+  description: "Subscribe to get silly bands for $1 USDC",
 };
 
 const config = {

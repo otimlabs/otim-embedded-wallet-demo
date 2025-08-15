@@ -4,12 +4,20 @@ import { useState, useEffect } from 'react';
 import { useTurnkey } from '@turnkey/sdk-react';
 import { useRouter } from 'next/navigation';
 
+// USDC token contract on Base Sepolia
+const USDC_CONTRACT = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
+const BASE_SEPOLIA_RPC = 'https://sepolia.base.org';
+
 export default function Dashboard() {
   const { turnkey, indexedDbClient } = useTurnkey();
   const [session, setSession] = useState<any>(null);
   const [walletInfo, setWalletInfo] = useState<any>(null);
+  const [usdcBalance, setUsdcBalance] = useState<string>('0.00');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isSubscribing, setIsSubscribing] = useState(false);
+  const [subscriptionStatus, setSubscriptionStatus] = useState<string>('');
+  const [isRefreshingBalance, setIsRefreshingBalance] = useState(false);
   const router = useRouter();
 
 
@@ -20,6 +28,97 @@ export default function Dashboard() {
       router.push('/');
     } catch (err) {
       console.error('Logout failed:', err);
+    }
+  };
+
+  const handleSubscribe = async () => {
+    if (!walletInfo || !walletInfo.accounts.length) {
+      setSubscriptionStatus('No wallet available');
+      return;
+    }
+
+    const ethAccount = walletInfo.accounts.find((acc: any) => acc.addressFormat === 'ADDRESS_FORMAT_ETHEREUM');
+    if (!ethAccount) {
+      setSubscriptionStatus('No Ethereum wallet found');
+      return;
+    }
+
+    // Check if user has enough balance
+    const currentBalance = parseFloat(usdcBalance);
+    if (currentBalance < 0.16) {
+      setSubscriptionStatus(`Insufficient balance. You need $0.16, but have $${usdcBalance}`);
+      return;
+    }
+
+    setIsSubscribing(true);
+    setSubscriptionStatus('Processing subscription...');
+
+    try {
+      // Simulate subscription process
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      setSubscriptionStatus('🎉 Subscription started! You will receive Silly Bandz every 10 seconds!');
+      
+      // Update balance (subtract $0.16)
+      const newBalance = (currentBalance - 0.16).toFixed(2);
+      setUsdcBalance(newBalance);
+      
+    } catch (error) {
+      console.error('Subscription failed:', error);
+      setSubscriptionStatus('❌ Subscription failed. Please try again.');
+    } finally {
+      setIsSubscribing(false);
+    }
+  };
+
+  const getUsdcBalance = async (address: string) => {
+    try {
+      // ERC20 balanceOf function selector
+      const balanceOfSelector = '0x70a08231';
+      const paddedAddress = address.slice(2).padStart(64, '0');
+      
+      const response = await fetch(BASE_SEPOLIA_RPC, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'eth_call',
+          params: [
+            {
+              to: USDC_CONTRACT,
+              data: balanceOfSelector + paddedAddress,
+            },
+            'latest',
+          ],
+          id: 1,
+        }),
+      });
+
+      const result = await response.json();
+      
+      if (result.result) {
+        // Convert hex balance to decimal (USDC has 6 decimals)
+        const balanceHex = result.result;
+        const balanceDecimal = parseInt(balanceHex, 16);
+        const usdcBalance = (balanceDecimal / 1000000).toFixed(2);
+        setUsdcBalance(usdcBalance);
+      }
+    } catch (error) {
+      console.error('Error fetching USDC balance:', error);
+      setUsdcBalance('0.00');
+    }
+  };
+
+  const refreshBalance = async () => {
+    if (!walletInfo || !walletInfo.accounts.length) return;
+    
+    const ethAccount = walletInfo.accounts.find((acc: any) => acc.addressFormat === 'ADDRESS_FORMAT_ETHEREUM');
+    if (ethAccount) {
+      setIsRefreshingBalance(true);
+      await getUsdcBalance(ethAccount.address);
+      setIsRefreshingBalance(false);
     }
   };
 
@@ -45,6 +144,12 @@ export default function Dashboard() {
             walletName: wallet.walletName,
             accounts: accounts?.accounts || []
           });
+
+          // Get USDC balance for the first Ethereum account
+          const ethAccount = accounts?.accounts.find((acc: any) => acc.addressFormat === 'ADDRESS_FORMAT_ETHEREUM');
+          if (ethAccount) {
+            await getUsdcBalance(ethAccount.address);
+          }
         } else {
           console.log('No wallets found for user');
           setWalletInfo({ walletId: 'No wallet found', walletName: 'No wallet', accounts: [] });
@@ -86,20 +191,74 @@ export default function Dashboard() {
     }
   }, [session]);
 
+  // Auto-refresh balance every 5 seconds
+  useEffect(() => {
+    if (!walletInfo || !walletInfo.accounts.length) return;
+
+    const interval = setInterval(() => {
+      refreshBalance();
+    }, 5000); // Refresh every 5 seconds
+
+    return () => clearInterval(interval);
+  }, [walletInfo]);
+
   return (
     <div className="min-h-screen bg-white relative">
-      {/* Logout button in top right */}
-      <button
-        onClick={handleLogout}
-        className="absolute top-6 right-6 bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors z-10"
-      >
-        Logout
-      </button>
+      {/* Balance, Wallet Address, Faucet, and Logout button in top right */}
+      <div className="absolute top-6 right-6 flex items-center gap-4 z-10">
+        <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-2 flex items-center gap-2">
+          <div className="text-lg font-bold text-gray-800">${usdcBalance}</div>
+          <a
+            href="https://faucet.circle.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="bg-blue-500 hover:bg-blue-600 text-white rounded w-6 h-6 flex items-center justify-center text-sm cursor-pointer transition-colors"
+            title="Get USDC from faucet"
+          >
+            💧
+          </a>
+        </div>
+        
+        <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-2 flex items-center gap-2">
+          <span className="text-sm font-mono text-gray-800">
+            {walletInfo?.accounts.find((acc: any) => acc.addressFormat === 'ADDRESS_FORMAT_ETHEREUM')?.address 
+              ? `${walletInfo.accounts.find((acc: any) => acc.addressFormat === 'ADDRESS_FORMAT_ETHEREUM').address.slice(0, 6)}...${walletInfo.accounts.find((acc: any) => acc.addressFormat === 'ADDRESS_FORMAT_ETHEREUM').address.slice(-4)}`
+              : 'No wallet'
+            }
+          </span>
+          <button
+            onClick={() => {
+              const address = walletInfo?.accounts.find((acc: any) => acc.addressFormat === 'ADDRESS_FORMAT_ETHEREUM')?.address;
+              if (address) {
+                navigator.clipboard.writeText(address);
+              }
+            }}
+            className="bg-gray-200 hover:bg-gray-300 text-gray-600 rounded w-6 h-6 flex items-center justify-center text-sm cursor-pointer transition-colors"
+            title="Copy address"
+          >
+            📋
+          </button>
+        </div>
+
+
+        
+        <button
+          onClick={handleLogout}
+          className="bg-red-500 hover:bg-red-600 text-white rounded w-8 h-8 flex items-center justify-center cursor-pointer transition-colors"
+          title="Logout"
+        >
+          🚪
+        </button>
+      </div>
+      
+      {/* Network indicator right under the top bar */}
+      <div className="absolute top-20 right-6 text-sm text-gray-500 font-medium">
+        Base Sepolia
+      </div>
 
       {/* Centered content */}
       <div className="min-h-screen flex items-center justify-center p-6">
         <div className="text-center max-w-md">
-          <h1 className="text-3xl font-bold text-gray-900 mb-8">Dashboard</h1>
           
           {isLoading && (
             <div className="bg-gray-50 p-8 rounded-xl">
@@ -120,19 +279,43 @@ export default function Dashboard() {
           )}
 
           {!isLoading && !error && walletInfo && walletInfo.accounts.length > 0 && (
-            <div className="bg-blue-50 p-8 rounded-xl border border-blue-200 shadow-lg">
-              <h2 className="text-xl font-semibold text-blue-800 mb-6">Your Ethereum Wallet</h2>
-              <div className="space-y-4">
-                <div className="bg-white p-4 rounded-lg border">
-                  <p className="text-sm text-gray-600 mb-2">Address</p>
-                  <p className="font-mono text-sm text-blue-900 break-all">
-                    {walletInfo.accounts.find((acc: any) => acc.addressFormat === 'ADDRESS_FORMAT_ETHEREUM')?.address || 'No ETH address found'}
-                  </p>
-                </div>
-                <div className="text-xs text-gray-500">
-                  Wallet ID: {walletInfo.walletId}
-                </div>
+            <div className="bg-purple-50 p-8 rounded-xl border border-purple-200 shadow-lg">
+              <div className="mb-6">
+                <h2 className="text-2xl font-bold text-purple-800 mb-2">Silly Bandz starting at $0.16!</h2>
               </div>
+              
+              {/* Silly Bandz Image */}
+              <div className="mb-6 flex justify-center">
+                <img 
+                  src="/silly-bandz.png" 
+                  alt="Colorful Silly Bandz bracelets on wrists" 
+                  className="w-64 h-48 object-cover rounded-lg shadow-lg"
+                />
+              </div>
+              
+              <button
+                onClick={handleSubscribe}
+                disabled={isSubscribing || parseFloat(usdcBalance) < 0.16}
+                className={`w-full py-3 px-6 rounded-lg font-semibold text-white transition-colors ${
+                  isSubscribing || parseFloat(usdcBalance) < 0.16
+                    ? 'bg-gray-400 cursor-not-allowed'
+                    : 'bg-purple-500 hover:bg-purple-600'
+                }`}
+              >
+                {isSubscribing ? 'Processing...' : 'Subscribe (buy every 10 seconds)'}
+              </button>
+
+              {subscriptionStatus && (
+                <div className={`mt-4 p-3 rounded-lg text-sm ${
+                  subscriptionStatus.includes('started') 
+                    ? 'bg-green-100 text-green-700 border border-green-200'
+                    : subscriptionStatus.includes('Insufficient') || subscriptionStatus.includes('failed')
+                    ? 'bg-red-100 text-red-700 border border-red-200'
+                    : 'bg-blue-100 text-blue-700 border border-blue-200'
+                }`}>
+                  {subscriptionStatus}
+                </div>
+              )}
             </div>
           )}
 
@@ -149,6 +332,8 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+      
+
     </div>
   );
 }

@@ -1,6 +1,6 @@
-# Turnkey Embedded Wallet Demo
+# Silly Bands Subscription App
 
-A super simple Turnkey login demo using Next.js and the Turnkey SDK.
+A simple subscription app for buying silly bands using USDC on Base Sepolia.
 
 ## Setup
 
@@ -25,7 +25,9 @@ npm run dev
 
 - ✅ Email authentication only
 - ✅ Light mode UI
-- ✅ Simple dashboard after login
+- ✅ Simple subscription interface
+- ✅ USDC balance display on Base Sepolia
+- ✅ $1 subscription for silly bands
 - ✅ Logout functionality
 - ✅ Minimal codebase
 

@@ -18,6 +18,7 @@ export default function Dashboard() {
   const [isSubscribing, setIsSubscribing] = useState(false);
   const [subscriptionStatus, setSubscriptionStatus] = useState<string>('');
   const [isRefreshingBalance, setIsRefreshingBalance] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
   const router = useRouter();
 
 
@@ -164,30 +165,57 @@ export default function Dashboard() {
   useEffect(() => {
     if (turnkey) {
       setIsLoading(true);
+      setError(null);
       
-      // Add a small delay to ensure Turnkey is fully initialized
-      setTimeout(() => {
-        turnkey.getSession().then((session) => {
+      const checkSession = async () => {
+        try {
+          const session = await turnkey.getSession();
           if (session) {
+            console.log('Session found:', session);
             setSession(session);
+            setRetryCount(0); // Reset retry count on success
           } else {
-            // No session found, redirect to login
+            console.log('No session found, redirecting to login');
             router.push('/');
           }
-        }).catch((error) => {
+        } catch (error) {
           console.error('Error getting session:', error);
           setError('Failed to load session');
           setIsLoading(false);
-        });
-      }, 100);
+          
+          // Retry up to 3 times
+          if (retryCount < 3) {
+            setTimeout(() => {
+              setRetryCount(prev => prev + 1);
+            }, 1000 * (retryCount + 1)); // Exponential backoff
+          }
+        }
+      };
+
+      // Try immediately first
+      checkSession();
+      
+      // If that fails, try again after a short delay
+      const timeoutId = setTimeout(checkSession, 500);
+      
+      return () => clearTimeout(timeoutId);
     }
-  }, [turnkey, router]);
+  }, [turnkey, router, retryCount]);
 
   useEffect(() => {
     if (session) {
-      getWalletInfo().finally(() => {
-        setIsLoading(false);
-      });
+      const loadWalletInfo = async () => {
+        try {
+          await getWalletInfo();
+        } catch (error) {
+          console.error('Error loading wallet info:', error);
+          setError('Failed to load wallet information');
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      
+      loadWalletInfo();
     }
   }, [session]);
 
@@ -269,12 +297,20 @@ export default function Dashboard() {
           {error && (
             <div className="bg-red-50 p-8 rounded-xl border border-red-200">
               <p className="text-red-600 mb-4">{error}</p>
-              <button
-                onClick={() => window.location.reload()}
-                className="bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
-              >
-                Retry
-              </button>
+              <div className="flex gap-2 justify-center">
+                <button
+                  onClick={() => window.location.reload()}
+                  className="bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
+                >
+                  Retry
+                </button>
+                <button
+                  onClick={() => router.push('/')}
+                  className="bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
+                >
+                  Go to Login
+                </button>
+              </div>
             </div>
           )}
 
@@ -293,17 +329,29 @@ export default function Dashboard() {
                 />
               </div>
               
-              <button
-                onClick={handleSubscribe}
-                disabled={isSubscribing || parseFloat(usdcBalance) < 0.16}
-                className={`w-full py-3 px-6 rounded-lg font-semibold text-white transition-colors ${
-                  isSubscribing || parseFloat(usdcBalance) < 0.16
-                    ? 'bg-gray-400 cursor-not-allowed'
-                    : 'bg-purple-500 hover:bg-purple-600'
-                }`}
-              >
-                {isSubscribing ? 'Processing...' : 'Subscribe (buy every 10 seconds)'}
-              </button>
+              {parseFloat(usdcBalance) < 0.16 ? (
+                <a
+                  href="https://faucet.circle.com/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full py-3 px-6 rounded-lg font-semibold text-white bg-blue-500 hover:bg-blue-600 transition-colors flex items-center justify-center gap-2"
+                >
+                  <span>💧</span>
+                  <span>Get USDC from Faucet</span>
+                </a>
+              ) : (
+                <button
+                  onClick={handleSubscribe}
+                  disabled={isSubscribing}
+                  className={`w-full py-3 px-6 rounded-lg font-semibold text-white transition-colors ${
+                    isSubscribing
+                      ? 'bg-gray-400 cursor-not-allowed'
+                      : 'bg-purple-500 hover:bg-purple-600'
+                  }`}
+                >
+                  {isSubscribing ? 'Processing...' : 'Subscribe (every 10 seconds)'}
+                </button>
+              )}
 
               {subscriptionStatus && (
                 <div className={`mt-4 p-3 rounded-lg text-sm ${

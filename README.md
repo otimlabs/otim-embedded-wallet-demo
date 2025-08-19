@@ -1,6 +1,6 @@
 # Otim Embedded Wallet Demo
 
-A simple TypeScript demo showcasing embedded wallet providers with Otim integration.
+A simple collection of TypeScript demo showcasing embedded wallet providers with Otim integration.
 
 ## Available Providers
 

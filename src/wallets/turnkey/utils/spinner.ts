@@ -1,23 +1,22 @@
-// Spinner helpers for terminal output
-const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-let activeSpinner: ReturnType<typeof setInterval> | null = null;
-let activeSpinnerIndex = 0;
+let spinnerInterval: NodeJS.Timeout | null = null;
+let currentMessage = '';
 
-export function startSpinner(getText: () => string, intervalMs = 100) {
-  stopSpinner();
-  activeSpinnerIndex = 0;
-  activeSpinner = setInterval(() => {
-    const frame = SPINNER_FRAMES[activeSpinnerIndex];
-    const text = getText();
-    process.stdout.write(`\r${frame} ${text}`);
-    activeSpinnerIndex = (activeSpinnerIndex + 1) % SPINNER_FRAMES.length;
-  }, intervalMs);
+const spinnerChars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+
+export function startSpinner(messageFn: () => string) {
+  currentMessage = messageFn();
+  let i = 0;
+  
+  spinnerInterval = setInterval(() => {
+    process.stdout.write(`\r${spinnerChars[i]} ${currentMessage}`);
+    i = (i + 1) % spinnerChars.length;
+    currentMessage = messageFn();
+  }, 100);
 }
 
 export function stopSpinner() {
-  if (activeSpinner) {
-    clearInterval(activeSpinner);
-    activeSpinner = null;
-    process.stdout.write('\r');
+  if (spinnerInterval) {
+    clearInterval(spinnerInterval);
+    spinnerInterval = null;
   }
 }

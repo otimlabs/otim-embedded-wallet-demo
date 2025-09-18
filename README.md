@@ -1,25 +1,19 @@
 # Otim Embedded Wallet Demo
 
-A simple collection of TypeScript demo showcasing embedded wallet providers with Otim integration.
+A simple collection of TypeScript demos showcasing embedded wallet providers with Otim integration.
 
 ## Available Providers
 
 ### Turnkey
 Run: `pnpm turnkey`
 
+### Privy
+Run: `pnpm privy`
+
 ## Setup
 
 1. Install dependencies: `pnpm install`
-2. Create `.env` file with your configuration:
-   ```
-   TURNKEY_ORGANIZATION_ID=your_organization_id
-   TURNKEY_API_PUBLIC_KEY=your_api_public_key
-   TURNKEY_API_PRIVATE_KEY=your_api_private_key
-   CHAIN_NAME=base-sepolia
-   CREATE_NEW_WALLET=false
-   ```
-
-
+2. Copy `.env.example` to `.env` and configure your credentials
 
 ## Configuration
 

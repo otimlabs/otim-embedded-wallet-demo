@@ -1,5 +1,5 @@
 {
-  "name": "turnkey-otim-demo",
+  "name": "otim-embedded-wallet-demo",
   "version": "1.0.0",
   "description": "Simple demo of Turnkey/Privy embedded wallets with Otim SDK",
   "main": "dist/index.js",

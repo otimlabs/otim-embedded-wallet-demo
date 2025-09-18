@@ -57,11 +57,6 @@ async function main() {
       
       walletId = id;
       accountAddress = address;
-      
-      console.log(`Created embedded wallet: ${accountAddress}`);
-      console.log(`Wallet ID: ${walletId}`);
-      console.log(`Chain Type: ${chainType}`);
-      
     } catch (error) {
       console.error("Failed to create wallet:", error);
       throw error;
@@ -80,16 +75,8 @@ async function main() {
       transport: http(RPC_URL)
     });
 
-    // ===== STEP 4: Initialize Otim Client =====
-    // Create a clean wallet client for Otim (without overridden methods)
-    const cleanWalletClient = createWalletClient({
-      account: accountAddress as `0x${string}`,
-      chain: CHAIN,
-      transport: http(RPC_URL)
-    });
-
-    // Override the clean wallet client methods to use Privy's walletApi for signing
-    cleanWalletClient.signMessage = async (args: any) => {
+    // Override wallet client methods to use Privy's walletApi for signing
+    walletClient.signMessage = async (args: any) => {
       const { signature } = await privyClient.walletApi.ethereum.signMessage({
         walletId,
         message: args.message
@@ -97,7 +84,7 @@ async function main() {
       return signature as `0x${string}`;
     };
 
-    cleanWalletClient.signTypedData = async (args: any) => {
+    walletClient.signTypedData = async (args: any) => {
       // Recursively convert all BigInt values to hex strings for Privy's API
       const sanitizeBigInts = (obj: any): any => {
         if (obj === null || obj === undefined) return obj;
@@ -127,8 +114,9 @@ async function main() {
       return signature as `0x${string}`;
     };
 
-    // Create Otim client with clean wallet client
-    const otimClient = createOtimClient({ walletClient: cleanWalletClient });
+    // ===== STEP 4: Initialize Otim Client =====
+    // Create Otim client with Privy-powered wallet
+    const otimClient = createOtimClient({ walletClient });
     
     // Login to Otim using SIWE (Sign-In with Ethereum)
     const loginResponse = await otimClient.auth.login({

@@ -5,10 +5,10 @@ import { createWalletClient, createPublicClient, http } from "viem";
 import { createAccount } from "@turnkey/viem";
 import { createOtimClient, createRlpEncodedAuthorization } from "@otim/sdk";
 import { parseUnits } from "viem";
-import { checkUSDCBalance } from './utils/balance';
-import { askQuestion } from './utils/input';
-import { monitorTransferBalances } from './utils/monitor';
-import { CHAIN_CONFIG, type SupportedChain } from './utils/constants';
+import { checkUSDCBalance } from '../../utils/balance';
+import { askQuestion } from '../../utils/input';
+import { monitorTransferBalances } from '../../utils/monitor';
+import { CHAIN_CONFIG, type SupportedChain } from '../../utils/constants';
 
 config();
 
@@ -125,7 +125,7 @@ async function main() {
     // ===== STEP 3: Setup Viem with Turnkey Account =====
     // Create Turnkey account for Viem integration
     const turnkeyAccount = await createAccount({ 
-      client: httpClient, 
+      client: httpClient as any, 
       organizationId: ORGANIZATION_ID!, 
       signWith: accountAddress, 
       ethereumAddress: accountAddress 

@@ -3,10 +3,10 @@ import { PrivyClient } from "@privy-io/server-auth";
 import { createWalletClient, createPublicClient, http } from "viem";
 import { createOtimClient, createRlpEncodedAuthorization } from "@otim/sdk";
 import { parseUnits } from "viem";
-import { checkUSDCBalance } from './utils/balance';
-import { askQuestion } from './utils/input';
-import { monitorTransferBalances } from './utils/monitor';
-import { CHAIN_CONFIG, type SupportedChain } from './utils/constants';
+import { checkUSDCBalance } from '../../utils/balance';
+import { askQuestion } from '../../utils/input';
+import { monitorTransferBalances } from '../../utils/monitor';
+import { CHAIN_CONFIG, type SupportedChain } from '../../utils/constants';
 
 config();
 
